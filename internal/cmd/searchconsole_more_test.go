@@ -427,7 +427,9 @@ func TestExecute_SearchConsoleInspect_EmptyResultIsError(t *testing.T) {
 			if result.err == nil || !strings.Contains(result.err.Error(), "empty inspection result") {
 				t.Fatalf("expected missing result error, got %v", result.err)
 			}
-			if result.stdout != "" {
+			if jsonOutput {
+				assertOnlyJSONError(t, result.stdout, 1)
+			} else if result.stdout != "" {
 				t.Fatalf("unexpected successful output: %s", result.stdout)
 			}
 		})

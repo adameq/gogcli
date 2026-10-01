@@ -112,9 +112,7 @@ func TestCalendarCreateDryRunEmptyPlaceIDErrors(t *testing.T) {
 			}
 		})
 	})
-	if strings.TrimSpace(out) != "" {
-		t.Fatalf("expected no dry-run output, got %q", out)
-	}
+	assertOnlyJSONError(t, out, 2)
 }
 
 func TestCalendarUpdateDryRunPlaceIDSkipsPlacesAPI(t *testing.T) {

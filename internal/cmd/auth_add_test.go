@@ -144,8 +144,8 @@ func TestAuthAddCmd_ExplainsGoogleAccountRequirementBeforeOAuth(t *testing.T) {
 			t.Fatalf("stderr = %q, want %q", result.stderr, want)
 		}
 	}
-	if result.stdout != "" {
-		t.Fatalf("authorization guidance leaked into JSON stdout: %q", result.stdout)
+	if message := assertOnlyJSONError(t, result.stdout, 1); message != providerError.Error() {
+		t.Fatalf("authorization guidance leaked into JSON error: %q", message)
 	}
 }
 
@@ -1085,7 +1085,8 @@ func TestAuthAddCmd_RemoteDryRunPreservesStepValidation(t *testing.T) {
 			if result.err == nil || ExitCode(result.err) != 2 || !strings.Contains(result.err.Error(), test.want) {
 				t.Fatalf("error = %v, exit = %d, want usage error containing %q", result.err, ExitCode(result.err), test.want)
 			}
-			if result.stdout != "" {
+			assertOnlyJSONError(t, result.stdout, 2)
+			if strings.Contains(result.stdout, "synthetic") || strings.Contains(result.stdout, "http://") {
 				t.Fatalf("invalid dry-run printed authorization material: %q", result.stdout)
 			}
 		})

@@ -68,9 +68,7 @@ func TestExecuteRejectsEmptyBatchFlag(t *testing.T) {
 					if ExitCode(result.err) != 2 || !strings.Contains(result.stderr, "--batch requires a non-empty batch ID") || !strings.Contains(result.stderr, "omit --batch") {
 						t.Fatalf("error = %v; stderr = %q", result.err, result.stderr)
 					}
-					if result.stdout != "" {
-						t.Fatalf("unexpected success output: %s", result.stdout)
-					}
+					assertOnlyJSONError(t, result.stdout, 2)
 				})
 			}
 		}

@@ -479,8 +479,8 @@ func TestExecuteRuntimeRoutesEarlyErrors(t *testing.T) {
 	if !strings.Contains(stderr.String(), "cannot combine --json and --plain") {
 		t.Fatalf("stderr = %q, want output mode error", stderr.String())
 	}
-	if stdout.Len() != 0 {
-		t.Fatalf("stdout = %q, want empty", stdout.String())
+	if !json.Valid(stdout.Bytes()) {
+		t.Fatalf("stdout = %q, want JSON error", stdout.String())
 	}
 }
 

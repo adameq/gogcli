@@ -237,3 +237,31 @@ gog mcp --allow-tool gmail_search,docs_get --list-tools
 
 Write tools remain hidden unless `--allow-write` is set and the tool also
 matches `--allow-tool`.
+
+## Error envelopes and list metadata
+
+In JSON mode (`--json`, `-j`, `--machine`, or the JSON environment defaults),
+a failed command emits one object on stdout with `error.code`, `error.message`,
+and `error.class`. The numeric code matches the exit status; the class uses the
+stable exit-code names above, such as `usage`, `auth_required`, or `retryable`.
+Explicit `--json=false` also disables automatic JSON selection.
+Human diagnostics on stderr remain unchanged. Error envelopes bypass
+`--results-only` and `--select` so their fields remain available.
+
+If a command has already written output, gog preserves that output and does not
+append an error object. This includes an empty list with `--fail-empty` (exit 3)
+and commands that report partial progress before failing. Always check the exit
+status, even when stdout contains a normal result.
+
+Paged list envelopes using the common paginator, and Drive file lists, include
+`count` (the number of returned result rows) and `has_more` (whether
+`nextPageToken` is nonempty). Existing command-specific aggregate values take
+precedence. These fields do not represent the total number of matching rows on
+the server. `--results-only` still unwraps the primary result collection and
+removes envelope metadata.
+
+Running `gog` without arguments now shows the executable path, description, and
+local auth/config status instead of help. Explicit `gog --help` still shows the
+command overview. JSON environment defaults produce the status object alone,
+without the text header. Normal command restrictions also apply to this implicit
+`status` command.

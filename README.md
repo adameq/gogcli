@@ -123,6 +123,11 @@ keyring storage.
 
 ## Discover the contract
 
+Running `gog` with no arguments shows the executable path, a short description,
+and local auth/config status. Use `gog --help` for the command overview. When
+JSON output is selected through the environment, the no-args view emits only
+the status JSON object.
+
 The running binary generates its command schema, reference pages, and agent
 skills from the same command tree:
 

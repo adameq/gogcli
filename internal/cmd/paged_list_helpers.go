@@ -20,7 +20,20 @@ func loadPagedItems[T any](page string, all bool, fetch pageFetchFunc[T]) ([]T, 
 	return fetch(page)
 }
 
+// addPagedAggregates preserves command-specific metadata and counts result rows,
+// excluding auxiliary arrays such as warnings and locations.
+func addPagedAggregates(payload map[string]any, count int) {
+	if _, exists := payload["count"]; !exists {
+		payload["count"] = count
+	}
+	if _, exists := payload["has_more"]; !exists {
+		tok, _ := payload["nextPageToken"].(string)
+		payload["has_more"] = tok != ""
+	}
+}
+
 func writePagedJSONResult(ctx context.Context, payload map[string]any, emptyCount int, failEmpty bool) error {
+	addPagedAggregates(payload, emptyCount)
 	if err := outfmt.WriteJSON(ctx, stdoutWriter(ctx), payload); err != nil {
 		return err
 	}

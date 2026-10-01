@@ -54,8 +54,9 @@ func TestExecute_GmailExpiredToken(t *testing.T) {
 	if !strings.Contains(result.err.Error(), "run 'gog auth add' to re-authorize") {
 		t.Fatalf("missing recovery advice: %v", result.err)
 	}
-	if result.stdout != "" || tokenCalls != 1 {
-		t.Fatalf("stdout = %q; token requests = %d, want empty output and one attempt", result.stdout, tokenCalls)
+	assertOnlyJSONError(t, result.stdout, exitCodeAuthRequired)
+	if tokenCalls != 1 {
+		t.Fatalf("token requests = %d, want one attempt", tokenCalls)
 	}
 }
 

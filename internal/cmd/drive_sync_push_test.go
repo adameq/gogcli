@@ -767,9 +767,7 @@ func TestExecuteDriveSyncPushPaginationErrorDoesNotWrite(t *testing.T) {
 	if listCalls.Load() != 2 || writes.Load() != 0 {
 		t.Fatalf("nested list calls = %d, writes = %d; want two reads and no writes", listCalls.Load(), writes.Load())
 	}
-	if strings.TrimSpace(result.stdout) != "" {
-		t.Fatalf("unexpected success output: %s", result.stdout)
-	}
+	assertOnlyJSONError(t, result.stdout, 1)
 }
 
 func TestExecuteDriveSyncPushDryRunPlansWithoutWrites(t *testing.T) {

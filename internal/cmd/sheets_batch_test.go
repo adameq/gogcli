@@ -316,9 +316,10 @@ func TestSheetsPersistedBatchDryRunsDoNotCaptureOrAppend(t *testing.T) {
 			t.Fatalf("%v: %v %s", command, result.err, result.stdout)
 		}
 		invalid := h.run(t, append(args, "--batch", "invalid")...)
-		if ExitCode(invalid.err) != 2 || invalid.stdout != "" {
+		if ExitCode(invalid.err) != 2 {
 			t.Fatalf("invalid batch preview succeeded: %v %s", invalid.err, invalid.stdout)
 		}
+		assertOnlyJSONError(t, invalid.stdout, 2)
 	}
 	after, err := os.ReadFile(h.storePath(t, id))
 	if err != nil || string(before) != string(after) || h.reads.Load() != 0 || len(h.posts) != 0 {

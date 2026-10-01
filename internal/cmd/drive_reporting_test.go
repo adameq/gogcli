@@ -487,9 +487,10 @@ func TestExecuteDriveReportingRejectsRepeatedPageToken(t *testing.T) {
 			if result.err == nil || !strings.Contains(result.err.Error(), wantError) || ExitCode(result.err) != 1 {
 				t.Fatalf("err = %v, exit = %d, stderr = %q; want folder list error", result.err, ExitCode(result.err), result.stderr)
 			}
-			if result.stdout != "" || !strings.Contains(result.stderr, wantError) {
+			if !strings.Contains(result.stderr, wantError) {
 				t.Fatalf("stdout = %q, stderr = %q; want only the list error", result.stdout, result.stderr)
 			}
+			assertOnlyJSONError(t, result.stdout, 1)
 			if got := listCalls.Load(); got != 2 {
 				t.Fatalf("list calls = %d, want 2", got)
 			}

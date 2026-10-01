@@ -499,8 +499,9 @@ func TestGmailDraftsRawAPIFailureDoesNotReportSuccess(t *testing.T) {
 	for _, operation := range []string{"create", "update"} {
 		args := append(rawDraftArgs(operation, path), "--account", "owner@example.com", "--json")
 		result := executeWithGmailTestService(t, args, svc)
-		if result.err == nil || result.stdout != "" {
+		if result.err == nil {
 			t.Fatalf("API failure: err=%v stdout=%s", result.err, result.stdout)
 		}
+		assertOnlyJSONError(t, result.stdout, 1)
 	}
 }

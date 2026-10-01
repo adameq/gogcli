@@ -197,9 +197,7 @@ func TestContactsDedupeExecuteRejectsRepeatedPageToken(t *testing.T) {
 	if got := listCalls.Load(); got != 2 {
 		t.Fatalf("list calls = %d, want 2", got)
 	}
-	if result.stdout != "" {
-		t.Fatalf("unexpected partial output: %q", result.stdout)
-	}
+	assertOnlyJSONError(t, result.stdout, 1)
 	t.Logf("err = %v after %d list calls", result.err, listCalls.Load())
 }
 

@@ -129,7 +129,9 @@ func writeDriveFileList(ctx context.Context, resp *drive.FileList, emptyMessage 
 	if outfmt.IsJSON(ctx) {
 		return outfmt.WriteJSON(ctx, stdoutWriter(ctx), map[string]any{
 			"files":         resp.Files,
+			"count":         len(resp.Files),
 			"nextPageToken": resp.NextPageToken,
+			"has_more":      resp.NextPageToken != "",
 		})
 	}
 

@@ -66,9 +66,7 @@ func TestExecute_DriveDownload_WithOutStdout_JSONRejected(t *testing.T) {
 	if result.err == nil || !strings.Contains(result.err.Error(), "can't combine --json with --out -") {
 		t.Fatalf("unexpected error: %v", result.err)
 	}
-	if result.stdout != "" {
-		t.Fatalf("stdout=%q, want empty", result.stdout)
-	}
+	assertOnlyJSONError(t, result.stdout, 2)
 	if called {
 		t.Fatalf("download should not be called")
 	}
@@ -136,9 +134,7 @@ func TestExecute_DocsExport_WithOutStdout_JSONRejected(t *testing.T) {
 	if result.err == nil || !strings.Contains(result.err.Error(), "can't combine --json with --out -") {
 		t.Fatalf("unexpected error: %v", result.err)
 	}
-	if result.stdout != "" {
-		t.Fatalf("stdout=%q, want empty", result.stdout)
-	}
+	assertOnlyJSONError(t, result.stdout, 2)
 	if called {
 		t.Fatalf("export should not be called")
 	}

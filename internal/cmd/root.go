@@ -125,10 +125,19 @@ func executeWithRuntime(args []string, runtime *app.Runtime) (err error) {
 	runtime = normalizedRuntime(runtime)
 	runtimeIO := runtime.IO
 
-	if len(args) == 0 {
-		args = []string{"--help"}
+	noArgs := len(args) == 0
+	if noArgs {
+		args = []string{"status"}
 	}
 	args = rewriteHelpArgs(args)
+	jsonErrors := earlyJSONMode(args, nil, runtimeIO.Out)
+	var output *errorOutputWriter
+	defer func() {
+		if err != nil && jsonErrors && (output == nil || !output.wrote) {
+			err = stableExitCode(err)
+			emitJSONErrorEnvelope(runtimeIO.Out, err)
+		}
+	}()
 
 	home, homeProvided := preScanHomeArg(args)
 	if bindErr := bindRuntimeLayoutResolver(runtime, home); bindErr != nil {
@@ -164,6 +173,7 @@ func executeWithRuntime(args []string, runtime *app.Runtime) (err error) {
 		}
 	}()
 
+	jsonErrors = earlyJSONMode(args, parser.Model.Node, runtimeIO.Out)
 	kctx, err = parser.Parse(args)
 	if err != nil {
 		return reportEarlyError(kctx, runtimeIO.Err, wrapParseError(err))
@@ -190,14 +200,16 @@ func executeWithRuntime(args []string, runtime *app.Runtime) (err error) {
 	// Treat automatic JSON as an ambient default, like the parser's environment
 	// and config-backed defaults. Locked flags run afterwards and therefore remain
 	// authoritative when a profile fixes json to false or plain to true.
-	if envBool("GOG_AUTO_JSON") && !cli.JSON && !cli.Plain && !isTerminalWriter(runtimeIO.Out) {
+	if envBool("GOG_AUTO_JSON") && !cli.JSON && !cli.Plain && !flagOnCommandLine(kctx, "json") && !flagOnCommandLine(kctx, "plain") && !isTerminalWriter(runtimeIO.Out) {
 		cli.JSON = true
 	}
 
 	if err = enforceBakedSafetyProfile(kctx); err != nil {
 		return reportEarlyError(kctx, runtimeIO.Err, err)
 	}
-	if err = enforceLockedFlags(kctx); err != nil {
+	err = enforceLockedFlags(kctx)
+	jsonErrors = cli.JSON
+	if err != nil {
 		return reportEarlyError(kctx, runtimeIO.Err, err)
 	}
 	// After the locks, so a locked output mode is what precedence resolves around
@@ -205,6 +217,7 @@ func executeWithRuntime(args []string, runtime *app.Runtime) (err error) {
 	if err = applyExplicitOutputModePrecedence(kctx, &cli.RootFlags); err != nil {
 		return reportEarlyError(kctx, runtimeIO.Err, err)
 	}
+	jsonErrors = cli.JSON
 	if err = enforceEnabledCommands(kctx, cli.EnableCommands, cli.EnableCommandsExact); err != nil {
 		return reportEarlyError(kctx, runtimeIO.Err, err)
 	}
@@ -232,6 +245,13 @@ func executeWithRuntime(args []string, runtime *app.Runtime) (err error) {
 	err = validateJSONTransformFlags(mode, &cli.RootFlags)
 	if err != nil {
 		return reportEarlyError(kctx, runtimeIO.Err, err)
+	}
+
+	if mode.JSON {
+		output = &errorOutputWriter{Writer: runtimeIO.Out}
+		runtimeCopy := *runtime
+		runtime = &runtimeCopy
+		runtime.IO.Out = output
 	}
 
 	ctx := context.Background()
@@ -329,7 +349,7 @@ func executeWithRuntime(args []string, runtime *app.Runtime) (err error) {
 	}
 
 	u, err := ui.New(ui.Options{
-		Stdout: runtimeIO.Out,
+		Stdout: runtime.IO.Out,
 		Stderr: runtimeIO.Err,
 		Color:  uiColor,
 	})
@@ -341,6 +361,9 @@ func executeWithRuntime(args []string, runtime *app.Runtime) (err error) {
 	kctx.BindTo(ctx, (*context.Context)(nil))
 	kctx.Bind(&cli.RootFlags)
 
+	if noArgs && !mode.JSON {
+		writeNoArgsHeader(runtime.IO.Out)
+	}
 	err = kctx.Run()
 	if err == nil {
 		return nil

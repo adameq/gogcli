@@ -2,6 +2,9 @@
 
 ## 0.42.1 - Unreleased
 
+- CLI: show executable, description, and auth/config status when invoked without arguments; use `gog --help` for the command overview. Preserve JSON-only status output and command policies. (#1172) — thanks @amiruluniten.
+- Output: add stable JSON error envelopes without appending a second document after command results, and include returned-row `count` and `has_more` in common paged lists and Drive file listings. (#1172) — thanks @amiruluniten.
+
 - Gmail: clarify full-payload versus raw MIME reads, quote source selection, and the limits of offline reply previews. (#1173) — thanks @hashtag1974.
 - Dependencies: refresh Google API/authentication, MCP and gRPC clients, golangci-lint, pnpm 11, and tracking-worker tooling while retaining Go 1.26 compatibility and the worker's 24-hour release-age policy. (#1175)
 

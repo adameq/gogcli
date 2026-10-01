@@ -38,9 +38,10 @@ func TestBatchServicesBeginRequiresExactlyOneTarget(t *testing.T) {
 					continue
 				}
 				result := executeWithTestRuntime(t, append(append([]string{}, args...), other.flag, "other1"), nil)
-				if ExitCode(result.err) != 2 || !strings.Contains(result.stderr, "exactly one") || result.stdout != "" {
+				if ExitCode(result.err) != 2 || !strings.Contains(result.stderr, "exactly one") {
 					t.Fatalf("accepted %s + %s: %v %s", target.flag, other.flag, result.err, result.stdout)
 				}
+				assertOnlyJSONError(t, result.stdout, 2)
 			}
 		})
 	}

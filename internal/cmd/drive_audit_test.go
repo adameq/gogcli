@@ -224,9 +224,10 @@ func TestExecuteDrivePermissionScanFailurePreventsOutputAndWrites(t *testing.T) 
 			if result.err == nil || !strings.Contains(result.err.Error(), wantError) || ExitCode(result.err) != 1 {
 				t.Fatalf("err = %v, exit = %d, stderr = %q; want file-specific scan error", result.err, ExitCode(result.err), result.stderr)
 			}
-			if result.stdout != "" || !strings.Contains(result.stderr, wantError) {
+			if !strings.Contains(result.stderr, wantError) {
 				t.Fatalf("stdout = %q, stderr = %q; want only the scan error", result.stdout, result.stderr)
 			}
+			assertOnlyJSONError(t, result.stdout, 1)
 			if filesCalls.Load() != 1 || firstPermissionCalls.Load() != 1 || secondPermissionCalls.Load() != 2 || mutations.Load() != 0 {
 				t.Fatalf("files = %d, first permissions = %d, second permissions = %d, mutations = %d", filesCalls.Load(), firstPermissionCalls.Load(), secondPermissionCalls.Load(), mutations.Load())
 			}

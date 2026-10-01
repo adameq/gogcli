@@ -204,9 +204,7 @@ func TestSheetsDataSourceRefreshRejectsMissingExecutionReply(t *testing.T) {
 				!strings.Contains(result.err.Error(), "inspect it before retrying") {
 				t.Fatalf("ambiguous refresh must fail with inspection guidance: %v", result.err)
 			}
-			if result.stdout != "" {
-				t.Fatalf("ambiguous refresh reported false success: %q", result.stdout)
-			}
+			assertOnlyJSONError(t, result.stdout, 1)
 			if requests.Load() != 1 {
 				t.Fatalf("potentially billable refresh ran %d times, want 1", requests.Load())
 			}
