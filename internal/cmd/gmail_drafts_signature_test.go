@@ -21,11 +21,11 @@ type draftSignatureCapture struct {
 	sigFetchedFor []string
 }
 
-// newDraftSignatureService serves send-as (primary me@example.com plus
+// newSignatureComposeService serves send-as (primary me@example.com plus
 // alias@example.com), per-address signatures (an empty value in signatures
 // means "configured but empty"), the reply source message, an existing draft d1,
 // and captures the Raw of whatever draft is created (POST) or updated (PUT).
-func newDraftSignatureService(t *testing.T, signatures map[string]string, source map[string]any) (*gmail.Service, *draftSignatureCapture, func()) {
+func newSignatureComposeService(t *testing.T, signatures map[string]string, source map[string]any) (*gmail.Service, *draftSignatureCapture, func()) {
 	t.Helper()
 	captured := &draftSignatureCapture{}
 	svc, cleanup := newGmailServiceForTest(t, func(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +70,7 @@ func primarySignature() map[string]string {
 }
 
 func TestGmailDraftsCreate_AppendsSendAsSignatureToPlainAndHTML(t *testing.T) {
-	svc, got, cleanup := newDraftSignatureService(t, primarySignature(), nil)
+	svc, got, cleanup := newSignatureComposeService(t, primarySignature(), nil)
 	defer cleanup()
 
 	result := executeWithGmailTestService(t, []string{
@@ -89,7 +89,7 @@ func TestGmailDraftsCreate_AppendsSendAsSignatureToPlainAndHTML(t *testing.T) {
 }
 
 func TestGmailDraftsCreate_SignatureStaysAboveQuote(t *testing.T) {
-	svc, got, cleanup := newDraftSignatureService(t, primarySignature(), mockReplySourceMessage())
+	svc, got, cleanup := newSignatureComposeService(t, primarySignature(), mockReplySourceMessage())
 	defer cleanup()
 
 	result := executeWithGmailTestService(t, []string{
@@ -116,7 +116,7 @@ func TestGmailDraftsCreate_AutoFromAliasUsesAliasSignature(t *testing.T) {
 			{"name": "Subject", "value": "Hi"},
 		}},
 	}
-	svc, got, cleanup := newDraftSignatureService(t, map[string]string{
+	svc, got, cleanup := newSignatureComposeService(t, map[string]string{
 		"me@example.com":    "<div>primary sig</div>",
 		"alias@example.com": "<div>alias sig</div>",
 	}, source)
@@ -142,7 +142,7 @@ func TestGmailDraftsCreate_SignatureFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte("Local Sig\nhttps://example.com"), 0o600); err != nil {
 		t.Fatalf("write signature file: %v", err)
 	}
-	svc, got, cleanup := newDraftSignatureService(t, nil, nil)
+	svc, got, cleanup := newSignatureComposeService(t, nil, nil)
 	defer cleanup()
 
 	result := executeWithGmailTestService(t, []string{
@@ -158,7 +158,7 @@ func TestGmailDraftsCreate_SignatureFile(t *testing.T) {
 }
 
 func TestGmailDraftsCreate_EmptySignatureWarnsAndCreatesDraft(t *testing.T) {
-	svc, got, cleanup := newDraftSignatureService(t, map[string]string{"me@example.com": ""}, nil)
+	svc, got, cleanup := newSignatureComposeService(t, map[string]string{"me@example.com": ""}, nil)
 	defer cleanup()
 
 	result := executeWithGmailTestService(t, []string{
@@ -189,7 +189,7 @@ func TestGmailDrafts_SignatureOptionsAreValidated(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			svc, _, cleanup := newDraftSignatureService(t, nil, nil)
+			svc, _, cleanup := newSignatureComposeService(t, nil, nil)
 			defer cleanup()
 			result := executeWithGmailTestService(t, append([]string{"--account", "me@example.com", "gmail"}, tc.args...), svc)
 			if result.err == nil || !strings.Contains(result.err.Error(), tc.want) {
@@ -235,7 +235,7 @@ func TestGmailDrafts_DryRunReportsSignatureFlags(t *testing.T) {
 }
 
 func TestGmailDraftsCreate_SignatureFromAlias(t *testing.T) {
-	svc, got, cleanup := newDraftSignatureService(t, map[string]string{
+	svc, got, cleanup := newSignatureComposeService(t, map[string]string{
 		"me@example.com":    "<div>primary sig</div>",
 		"alias@example.com": "<div>alias sig</div>",
 	}, nil)
@@ -255,7 +255,7 @@ func TestGmailDraftsCreate_SignatureFromAlias(t *testing.T) {
 
 func TestGmailDraftsForward_SignatureFromAlias(t *testing.T) {
 	t.Setenv("GOG_TIMEZONE", "UTC")
-	svc, got, cleanup := newDraftSignatureService(t, map[string]string{
+	svc, got, cleanup := newSignatureComposeService(t, map[string]string{
 		"me@example.com":    "<div>primary sig</div>",
 		"alias@example.com": "<div>alias sig</div>",
 	}, nil)
@@ -275,7 +275,7 @@ func TestGmailDraftsForward_SignatureFromAlias(t *testing.T) {
 
 func TestGmailDraftsForward_ImageOnlySignatureLeavesNoLoneSeparator(t *testing.T) {
 	t.Setenv("GOG_TIMEZONE", "UTC")
-	svc, got, cleanup := newDraftSignatureService(t, map[string]string{
+	svc, got, cleanup := newSignatureComposeService(t, map[string]string{
 		"me@example.com": `<img src="https://example.com/logo.png">`,
 	}, nil)
 	defer cleanup()
@@ -296,7 +296,7 @@ func TestGmailDraftsForward_ImageOnlySignatureLeavesNoLoneSeparator(t *testing.T
 }
 
 func TestGmailDraftsUpdate_AppendsSendAsSignatureToNewBody(t *testing.T) {
-	svc, got, cleanup := newDraftSignatureService(t, primarySignature(), nil)
+	svc, got, cleanup := newSignatureComposeService(t, primarySignature(), nil)
 	defer cleanup()
 
 	result := executeWithGmailTestService(t, []string{
@@ -316,7 +316,7 @@ func TestGmailDraftsUpdate_AppendsSendAsSignatureToNewBody(t *testing.T) {
 
 func TestGmailDraftsForward_SignatureBetweenNoteAndForwardedMessage(t *testing.T) {
 	t.Setenv("GOG_TIMEZONE", "UTC")
-	svc, got, cleanup := newDraftSignatureService(t, primarySignature(), nil)
+	svc, got, cleanup := newSignatureComposeService(t, primarySignature(), nil)
 	defer cleanup()
 
 	result := executeWithGmailTestService(t, []string{
@@ -336,7 +336,7 @@ func TestGmailDraftsForward_SignatureBetweenNoteAndForwardedMessage(t *testing.T
 
 func TestGmailForward_SignatureBetweenNoteAndForwardedMessage(t *testing.T) {
 	t.Setenv("GOG_TIMEZONE", "UTC")
-	svc, got, cleanup := newDraftSignatureService(t, primarySignature(), nil)
+	svc, got, cleanup := newSignatureComposeService(t, primarySignature(), nil)
 	defer cleanup()
 
 	result := executeWithGmailTestService(t, []string{
@@ -356,7 +356,7 @@ func TestGmailForward_SignatureBetweenNoteAndForwardedMessage(t *testing.T) {
 
 func TestGmailDraftsForward_SignatureWithoutNote(t *testing.T) {
 	t.Setenv("GOG_TIMEZONE", "UTC")
-	svc, got, cleanup := newDraftSignatureService(t, primarySignature(), nil)
+	svc, got, cleanup := newSignatureComposeService(t, primarySignature(), nil)
 	defer cleanup()
 
 	result := executeWithGmailTestService(t, []string{
@@ -376,7 +376,7 @@ func TestGmailDraftsForward_SignatureWithoutNote(t *testing.T) {
 
 func TestGmailDraftsForward_EmptySignatureWarns(t *testing.T) {
 	t.Setenv("GOG_TIMEZONE", "UTC")
-	svc, got, cleanup := newDraftSignatureService(t, map[string]string{"me@example.com": ""}, nil)
+	svc, got, cleanup := newSignatureComposeService(t, map[string]string{"me@example.com": ""}, nil)
 	defer cleanup()
 
 	result := executeWithGmailTestService(t, []string{

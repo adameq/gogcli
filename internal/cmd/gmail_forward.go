@@ -197,13 +197,12 @@ func (c *GmailForwardOptions) buildForwardComposeMessage(ctx context.Context, sv
 	}
 
 	// Build forwarded body (plain text).
-	fwdPlain := formatForwardedMessage(forwardPlainNote(inputs.note, signature), origFrom, origDate, origSubject, origTo, origCc, origPlain, loc)
+	fwdPlain := formatForwardedMessage(inputs.note, signature, origFrom, origDate, origSubject, origTo, origCc, origPlain, loc)
 
 	// Build forwarded body (HTML) if original had HTML.
 	var fwdHTML string
 	if origHTML != "" {
-		fwdHTML = forwardNoteHTML(inputs.note) + forwardSignatureHTML(signature) +
-			formatForwardedMessageHTML("", origFrom, origDate, origSubject, origTo, origCc, origHTML, loc)
+		fwdHTML = formatForwardedMessageHTML(inputs.note, signature, origFrom, origDate, origSubject, origTo, origCc, origHTML, loc)
 	}
 
 	// Preserve CID-backed inline resources required by the forwarded HTML and,
@@ -282,11 +281,15 @@ func stripForwardPrefix(subject string) string {
 }
 
 // formatForwardedMessage builds the plain-text forwarded body.
-func formatForwardedMessage(note, from, date, subject, to, cc, body string, loc *time.Location) string {
+func formatForwardedMessage(note string, signature composeSignature, from, date, subject, to, cc, body string, loc *time.Location) string {
 	var sb strings.Builder
 
 	if strings.TrimSpace(note) != "" {
 		sb.WriteString(strings.TrimSpace(note))
+		sb.WriteString("\n\n")
+	}
+	if block := signature.plainBlock(); block != "" {
+		sb.WriteString(block)
 		sb.WriteString("\n\n")
 	}
 
@@ -308,39 +311,19 @@ func formatForwardedMessage(note, from, date, subject, to, cc, body string, loc 
 	return sb.String()
 }
 
-// forwardPlainNote returns the plain note with the signature below it, or the
-// signature alone when there is no note. A signature without plain text adds nothing.
-func forwardPlainNote(note string, signature composeSignature) string {
-	block := signature.plainBlock()
-	if block == "" {
-		return note
-	}
-	if strings.TrimSpace(note) == "" {
-		return block
-	}
-	return appendBodyBlock(note, block)
-}
-
-func forwardNoteHTML(note string) string {
-	if strings.TrimSpace(note) == "" {
-		return ""
-	}
-	return "<div>" + html.EscapeString(strings.TrimSpace(note)) + "</div><br>"
-}
-
-func forwardSignatureHTML(signature composeSignature) string {
-	block := signature.htmlBlock()
-	if block == "" {
-		return ""
-	}
-	return block + "<br>"
-}
-
 // formatForwardedMessageHTML builds the HTML forwarded body.
-func formatForwardedMessageHTML(note, from, date, subject, to, cc, htmlContent string, loc *time.Location) string {
+func formatForwardedMessageHTML(note string, signature composeSignature, from, date, subject, to, cc, htmlContent string, loc *time.Location) string {
 	var sb strings.Builder
 
-	sb.WriteString(forwardNoteHTML(note))
+	if strings.TrimSpace(note) != "" {
+		sb.WriteString("<div>")
+		sb.WriteString(html.EscapeString(strings.TrimSpace(note)))
+		sb.WriteString("</div><br>")
+	}
+	if block := signature.htmlBlock(); block != "" {
+		sb.WriteString(block)
+		sb.WriteString("<br>")
+	}
 
 	sb.WriteString(`<div class="gmail_quote">`)
 	sb.WriteString(`<div style="margin:0 0 10px 0;color:#777">---------- Forwarded message ---------</div>`)
