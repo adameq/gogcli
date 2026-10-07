@@ -16,7 +16,7 @@ import (
 	"github.com/openclaw/gogcli/internal/app"
 )
 
-type draftSignatureCapture struct {
+type signatureCapture struct {
 	raw           string
 	sigFetchedFor []string
 }
@@ -24,10 +24,11 @@ type draftSignatureCapture struct {
 // newSignatureComposeService serves send-as (primary me@example.com plus
 // alias@example.com), per-address signatures (an empty value in signatures
 // means "configured but empty"), the reply source message, an existing draft d1,
-// and captures the Raw of whatever draft is created (POST) or updated (PUT).
-func newSignatureComposeService(t *testing.T, signatures map[string]string, source map[string]any) (*gmail.Service, *draftSignatureCapture, func()) {
+// and captures the Raw of whatever draft is created (POST) or updated (PUT)
+// or message is sent (messages/send).
+func newSignatureComposeService(t *testing.T, signatures map[string]string, source map[string]any) (*gmail.Service, *signatureCapture, func()) {
 	t.Helper()
-	captured := &draftSignatureCapture{}
+	captured := &signatureCapture{}
 	svc, cleanup := newGmailServiceForTest(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		const sendAsPrefix = "/gmail/v1/users/me/settings/sendAs/"
