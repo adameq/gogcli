@@ -20,13 +20,14 @@ type GmailForwardCmd struct {
 }
 
 type GmailForwardOptions struct {
-	To              string `name:"to" help:"Recipients (comma-separated; required when sending, optional when saving a draft)"`
-	Cc              string `name:"cc" help:"CC recipients (comma-separated)"`
-	Bcc             string `name:"bcc" help:"BCC recipients (comma-separated)"`
-	Note            string `name:"note" aliases:"intro" help:"Introductory text above the forwarded message"`
-	NoteFile        string `name:"note-file" help:"Note file path (plain text; '-' for stdin)"`
-	From            string `name:"from" help:"Send from this email address (must be a verified send-as alias)"`
-	SkipAttachments bool   `name:"skip-attachments" help:"Do not include original attachments"`
+	To                      string `name:"to" help:"Recipients (comma-separated; required when sending, optional when saving a draft)"`
+	Cc                      string `name:"cc" help:"CC recipients (comma-separated)"`
+	Bcc                     string `name:"bcc" help:"BCC recipients (comma-separated)"`
+	Note                    string `name:"note" aliases:"intro" help:"Introductory text above the forwarded message"`
+	NoteFile                string `name:"note-file" help:"Note file path (plain text; '-' for stdin)"`
+	From                    string `name:"from" help:"Send from this email address (must be a verified send-as alias)"`
+	SkipAttachments         bool   `name:"skip-attachments" help:"Do not include original attachments"`
+	composeSignatureOptions `embed:""`
 }
 
 // recipientRequirement records whether a compose path must have recipients. The
@@ -106,6 +107,9 @@ func (c *GmailForwardOptions) dryRunFields(inputs forwardComposeInputs) map[stri
 		"from":             strings.TrimSpace(c.From),
 		"note_len":         len(inputs.note),
 		"skip_attachments": c.SkipAttachments,
+		"signature":        c.Signature,
+		"signature_from":   strings.TrimSpace(c.SignatureFrom),
+		"signature_file":   strings.TrimSpace(c.SignatureFile),
 	}
 }
 
@@ -118,6 +122,10 @@ func (c *GmailForwardOptions) resolveForwardInputs(ctx context.Context, messageI
 	messageID = normalizeGmailMessageID(messageID)
 	if messageID == "" {
 		return forwardComposeInputs{}, usage("required: messageId")
+	}
+
+	if signatureErr := c.validateSignatureOptions(); signatureErr != nil {
+		return forwardComposeInputs{}, signatureErr
 	}
 
 	// Parsed before the dry-run so it reports the lists the build will use.
@@ -156,6 +164,11 @@ func (c *GmailForwardOptions) buildForwardComposeMessage(ctx context.Context, sv
 		return forwardComposeMessage{}, err
 	}
 
+	signature, err := c.requestedSignature(ctx, svc, from.sendingEmail)
+	if err != nil {
+		return forwardComposeMessage{}, err
+	}
+
 	// Fetch the original message in full format (headers + body + attachment metadata).
 	origMsg, err := svc.Users.Messages.Get("me", inputs.messageID).Format(gmailFormatFull).Context(ctx).Do()
 	if err != nil {
@@ -184,12 +197,13 @@ func (c *GmailForwardOptions) buildForwardComposeMessage(ctx context.Context, sv
 	}
 
 	// Build forwarded body (plain text).
-	fwdPlain := formatForwardedMessage(inputs.note, origFrom, origDate, origSubject, origTo, origCc, origPlain, loc)
+	fwdPlain := formatForwardedMessage(forwardPlainNote(inputs.note, signature), origFrom, origDate, origSubject, origTo, origCc, origPlain, loc)
 
 	// Build forwarded body (HTML) if original had HTML.
 	var fwdHTML string
 	if origHTML != "" {
-		fwdHTML = formatForwardedMessageHTML(inputs.note, origFrom, origDate, origSubject, origTo, origCc, origHTML, loc)
+		fwdHTML = forwardNoteHTML(inputs.note) + forwardSignatureHTML(signature) +
+			formatForwardedMessageHTML("", origFrom, origDate, origSubject, origTo, origCc, origHTML, loc)
 	}
 
 	// Preserve CID-backed inline resources required by the forwarded HTML and,
@@ -294,15 +308,39 @@ func formatForwardedMessage(note, from, date, subject, to, cc, body string, loc 
 	return sb.String()
 }
 
+// forwardPlainNote returns the plain note with the signature below it, or the
+// signature alone when there is no note. A signature without plain text adds nothing.
+func forwardPlainNote(note string, signature composeSignature) string {
+	block := signature.plainBlock()
+	if block == "" {
+		return note
+	}
+	if strings.TrimSpace(note) == "" {
+		return block
+	}
+	return appendBodyBlock(note, block)
+}
+
+func forwardNoteHTML(note string) string {
+	if strings.TrimSpace(note) == "" {
+		return ""
+	}
+	return "<div>" + html.EscapeString(strings.TrimSpace(note)) + "</div><br>"
+}
+
+func forwardSignatureHTML(signature composeSignature) string {
+	block := signature.htmlBlock()
+	if block == "" {
+		return ""
+	}
+	return block + "<br>"
+}
+
 // formatForwardedMessageHTML builds the HTML forwarded body.
 func formatForwardedMessageHTML(note, from, date, subject, to, cc, htmlContent string, loc *time.Location) string {
 	var sb strings.Builder
 
-	if strings.TrimSpace(note) != "" {
-		sb.WriteString("<div>")
-		sb.WriteString(html.EscapeString(strings.TrimSpace(note)))
-		sb.WriteString("</div><br>")
-	}
+	sb.WriteString(forwardNoteHTML(note))
 
 	sb.WriteString(`<div class="gmail_quote">`)
 	sb.WriteString(`<div style="margin:0 0 10px 0;color:#777">---------- Forwarded message ---------</div>`)
