@@ -331,6 +331,48 @@ func TestReauthPreservesLimitedGmailGrants(t *testing.T) {
 	}
 }
 
+func TestReauthKeepsNarrowedPhotosGrantNarrow(t *testing.T) {
+	const (
+		photosRead   = "https://www.googleapis.com/auth/photoslibrary.readonly.appcreateddata"
+		photosAppend = "https://www.googleapis.com/auth/photoslibrary.appendonly"
+	)
+
+	for _, tc := range []struct {
+		name    string
+		scopes  []string
+		disable bool
+	}{
+		{name: "photos read-only", scopes: []string{photosRead}, disable: true},
+		{name: "photos read-only with calendar", scopes: []string{photosRead, "https://www.googleapis.com/auth/calendar"}, disable: true},
+		{name: "photos append", scopes: []string{photosRead, photosAppend}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := ReauthOptions{
+				Email:       "user@example.com",
+				Client:      "default",
+				Services:    []string{"photos"},
+				Scopes:      []string{photosRead},
+				StoredToken: &secrets.Token{Services: []string{"photos"}, Scopes: tc.scopes},
+				Confirm:     func(context.Context, string) (bool, error) { return true, nil },
+				AuthorizeFunc: func(_ context.Context, authOpts AuthorizeOptions) (string, error) {
+					if authOpts.DisableIncludeGrantedScopes != tc.disable {
+						t.Fatalf("disable incremental grants = %t, want %t", authOpts.DisableIncludeGrantedScopes, tc.disable)
+					}
+
+					return "new-refresh-token", nil
+				},
+				FetchIdentityFunc: func(context.Context, string, string, []string, time.Duration) (Identity, error) {
+					return Identity{Email: "user@example.com"}, nil
+				},
+				Stderr: &bytesBuffer{},
+			}
+			if _, err := Reauth(context.Background(), opts); err != nil {
+				t.Fatalf("reauth: %v", err)
+			}
+		})
+	}
+}
+
 func TestReauthPreservesIncrementalGrantsWhenStoredScopesAreMissing(t *testing.T) {
 	opts := ReauthOptions{
 		Email:       "user@example.com",

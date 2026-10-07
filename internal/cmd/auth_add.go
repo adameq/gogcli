@@ -30,6 +30,7 @@ type AuthAddCmd struct {
 	ServicesCSV  string        `name:"services" help:"Services to authorize: user|all-user or comma-separated ${auth_services}; explicit opt-in: adsense, photospicker; all means all default user OAuth services. Workspace service-account-only services: admin, groups, keep" default:"user"`
 	DriveScope   string        `name:"drive-scope" help:"Drive scope mode: full|readonly|file" enum:"full,readonly,file" default:"full"`
 	GmailScope   string        `name:"gmail-scope" help:"Gmail scope mode: full|readonly|send|read-send" enum:"full,readonly,send,read-send" default:"full"`
+	PhotosScope  string        `name:"photos-scope" help:"Photos scope mode: readonly|append (append adds upload and app-created album create)" enum:"readonly,append" default:"readonly"`
 	ExtraScopes  string        `name:"extra-scopes" help:"Comma-separated list of additional OAuth scope URIs to request (appended after service scopes)"`
 }
 
@@ -58,6 +59,9 @@ func formatRemoteStep2Instruction(services []googleauth.Service, c *AuthAddCmd, 
 	}
 	if gmailScope := strings.ToLower(strings.TrimSpace(c.GmailScope)); gmailScope != "" && gmailScope != string(googleauth.GmailScopeFull) {
 		parts = append(parts, "--gmail-scope", gmailScope)
+	}
+	if photosScope := strings.ToLower(strings.TrimSpace(c.PhotosScope)); photosScope == string(googleauth.PhotosScopeAppend) {
+		parts = append(parts, "--photos-scope", photosScope)
 	}
 	if extraScopes := parseExtraScopesCSV(c.ExtraScopes); len(extraScopes) > 0 {
 		parts = append(parts, "--extra-scopes", strings.Join(extraScopes, ","))
@@ -94,6 +98,23 @@ func authScopeModes(readonly bool, rawDriveScope, rawGmailScope string) (string,
 	disableIncremental := readonly || driveScope == "readonly" || driveScope == strFile || limitedGmailScope
 
 	return driveScope, gmailScope, disableIncremental, nil
+}
+
+// photosNarrowsGrant is true when Photos is requested without append. Google must
+// then not include previously granted scopes, or an earlier append grant would
+// survive a reauthorization the stored metadata records as read-only.
+func photosNarrowsGrant(services []googleauth.Service, photosScope string) bool {
+	if photosScope == string(googleauth.PhotosScopeAppend) {
+		return false
+	}
+
+	for _, service := range services {
+		if service == googleauth.ServicePhotos {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (c *AuthAddCmd) resolvedRedirectURI() (string, error) {
@@ -136,10 +157,20 @@ func (c *AuthAddCmd) Run(ctx context.Context, flags *RootFlags) error {
 
 	extraScopes := parseExtraScopesCSV(c.ExtraScopes)
 
+	photosScope := strings.ToLower(strings.TrimSpace(c.PhotosScope))
+	if readonly && photosScope == string(googleauth.PhotosScopeAppend) {
+		return usage("cannot combine --readonly with --photos-scope=append (upload is write-capable)")
+	}
+
+	if photosNarrowsGrant(services, photosScope) {
+		disableIncludeGrantedScopes = true
+	}
+
 	scopes, err := googleauth.ScopesForManageWithOptions(services, googleauth.ScopeOptions{
 		Readonly:    readonly,
 		DriveScope:  googleauth.DriveScopeMode(driveScope),
 		GmailScope:  googleauth.GmailScopeMode(gmailScope),
+		PhotosScope: googleauth.PhotosScopeMode(photosScope),
 		ExtraScopes: extraScopes,
 	})
 	if err != nil {

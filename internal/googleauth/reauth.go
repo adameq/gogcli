@@ -156,11 +156,16 @@ func Reauth(ctx context.Context, opts ReauthOptions) (secrets.Token, error) {
 
 	fmt.Fprintln(stderr, "Re-authorizing…")
 
+	// A grant narrowed to read-only (limited Gmail, or Photos without append) must
+	// not ask Google to include previously granted scopes, or wider access returns.
+	narrowed := opts.StoredToken != nil &&
+		(hasLimitedGmailGrant(opts.StoredToken.Scopes) || hasLimitedPhotosGrant(opts.StoredToken.Scopes))
+
 	authorizeOpts := AuthorizeOptions{
 		Services:                    services,
 		Scopes:                      reauthScopes,
 		ForceConsent:                true, // Ensure Google returns a new refresh token
-		DisableIncludeGrantedScopes: opts.StoredToken != nil && hasLimitedGmailGrant(opts.StoredToken.Scopes),
+		DisableIncludeGrantedScopes: narrowed,
 		Timeout:                     timeout,
 		Client:                      opts.Client,
 	}
@@ -206,6 +211,24 @@ func Reauth(ctx context.Context, opts ReauthOptions) (secrets.Token, error) {
 	fmt.Fprintln(stderr, "Re-authorization successful. Retrying request…")
 
 	return updated, nil
+}
+
+// hasLimitedPhotosGrant reports a Photos grant narrowed to read-only (app-created
+// read scope without appendonly). Reauthorizing it must not ask Google to include
+// previously granted scopes, or an earlier append grant would come back.
+func hasLimitedPhotosGrant(scopes []string) bool {
+	readonly := false
+
+	for _, scope := range scopes {
+		switch scope {
+		case photosScopeAppendOnly:
+			return false
+		case photosScopeReadonlyAppCreated:
+			readonly = true
+		}
+	}
+
+	return readonly
 }
 
 func hasLimitedGmailGrant(scopes []string) bool {
