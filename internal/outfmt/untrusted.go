@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"regexp"
 	"strings"
 	"unicode"
@@ -59,12 +60,33 @@ type UntrustedWrapOptions struct {
 	Enabled        bool
 	Source         string
 	IncludeWarning bool
+	contentKeys    map[string]bool
 }
 
 type untrustedWrapKey struct{}
 
 func WithUntrustedWrapper(ctx context.Context, opts UntrustedWrapOptions) context.Context {
 	return context.WithValue(ctx, untrustedWrapKey{}, opts.normalized())
+}
+
+// WithUntrustedContentKeys identifies command-specific text fields, including
+// when JSON projection removes their original enclosing object.
+func WithUntrustedContentKeys(ctx context.Context, keys ...string) context.Context {
+	opts, ok := UntrustedWrapperFromContext(ctx)
+	if !ok {
+		return ctx
+	}
+
+	opts.contentKeys = maps.Clone(opts.contentKeys)
+	if opts.contentKeys == nil {
+		opts.contentKeys = make(map[string]bool, len(keys))
+	}
+
+	for _, key := range keys {
+		opts.contentKeys[key] = true
+	}
+
+	return WithUntrustedWrapper(ctx, opts)
 }
 
 func UntrustedWrapperFromContext(ctx context.Context) (UntrustedWrapOptions, bool) {
@@ -87,6 +109,21 @@ func (o UntrustedWrapOptions) normalized() UntrustedWrapOptions {
 	}
 
 	return o
+}
+
+func (o UntrustedWrapOptions) matchesContentKey(key string) bool {
+	if len(o.contentKeys) == 0 {
+		return false
+	}
+
+	if o.contentKeys[key] {
+		return true
+	}
+
+	// JSON projection retains the dotted selection path as its output key.
+	i := strings.LastIndexByte(key, '.')
+
+	return i >= 0 && o.contentKeys[strings.TrimSpace(key[i+1:])]
 }
 
 func WrapUntrustedContent(content string, opts UntrustedWrapOptions) string {
@@ -207,7 +244,7 @@ func wrapUntrustedGenericValue(v any, opts UntrustedWrapOptions, path []string, 
 			return WrapUntrustedContent(vv, opts), true
 		}
 
-		if shouldWrapUntrustedString(path, key, vv) {
+		if shouldWrapUntrustedString(path, key, vv) || (vv != "" && opts.matchesContentKey(key)) {
 			return WrapUntrustedContent(vv, opts), true
 		}
 

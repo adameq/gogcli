@@ -35,8 +35,8 @@ func gmailMessageColumns(includeBody, includeAttachments, full bool) []outfmt.Co
 		{Header: "ID", Value: func(item messageItem) string { return item.ID }},
 		{Header: "THREAD", Value: func(item messageItem) string { return item.ThreadID }},
 		{Header: "DATE", Value: func(item messageItem) string { return item.Date }},
-		{Header: "FROM", Value: func(item messageItem) string { return item.From }},
-		{Header: "SUBJECT", Value: func(item messageItem) string { return item.Subject }},
+		{Header: "FROM", Value: func(item messageItem) string { return sanitizeGmailTableValue(item.From) }},
+		{Header: "SUBJECT", Value: func(item messageItem) string { return sanitizeGmailTableValue(item.Subject) }},
 		{Header: "LABELS", Value: func(item messageItem) string { return strings.Join(item.Labels, ",") }},
 	}
 	if includeBody {
@@ -55,8 +55,8 @@ func gmailMessageColumns(includeBody, includeAttachments, full bool) []outfmt.Co
 				for i, a := range item.Attachments {
 					parts[i] = fmt.Sprintf(
 						"%s (%s, %s)",
-						sanitizeGmailAttachmentTableValue(a.Filename),
-						sanitizeGmailAttachmentTableValue(a.MimeType),
+						sanitizeGmailTableValue(a.Filename),
+						sanitizeGmailTableValue(a.MimeType),
 						a.SizeHuman,
 					)
 				}
@@ -67,7 +67,7 @@ func gmailMessageColumns(includeBody, includeAttachments, full bool) []outfmt.Co
 	return columns
 }
 
-func sanitizeGmailAttachmentTableValue(value string) string {
+func sanitizeGmailTableValue(value string) string {
 	return strings.Map(func(char rune) rune {
 		if unicode.IsControl(char) {
 			return ' '

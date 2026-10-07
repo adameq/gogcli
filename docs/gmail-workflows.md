@@ -84,6 +84,20 @@ message text for automation. Message JSON remains under the `message` key;
 add `--results-only` to emit that sanitized message directly. Both shapes emit
 the message headers and body once.
 
+Message search can include recipient headers and sanitized content from its
+existing per-message reads:
+
+```bash
+gog gmail messages search 'newer_than:7d' --include-recipients --include-body --sanitize-content --json
+```
+
+`--include-recipients` adds To, Cc, and Bcc to JSON results. `--sanitize-content`
+removes HTML and HTTP(S) URLs from returned body/header text, as in `gmail get`;
+it cannot be combined with an HTML body format. Add `--wrap-untrusted` to mark
+sender and recipient display text as untrusted, including with `--results-only`
+and `--select`. MCP `gmail_search` exposes `include_recipients` and
+`sanitize_content` with the same behavior.
+
 Message JSON exposes Reply-To as `headers.reply_to` in both full and default
 metadata reads. With `--sanitize-content`, use `message.headers.reply_to` (or
 `headers.reply_to` with `--results-only`); sanitized thread reads expose it in

@@ -2,6 +2,7 @@
 
 ## 0.43.1 - Unreleased
 
+- Gmail: include recipient headers and optionally sanitize message-search content through CLI and MCP; preserve untrusted sender/recipient wrapping across JSON projection. (#1188) — thanks @kendrickkester.
 - Photos: upload media and list/create app-created albums with an explicit append-scope opt-in; preserve read-only defaults and narrowed grants during reauthorization. (#1185) — thanks @beyondzero.
 - Meet: configure recording, transcription, smart notes, attendance reports, and moderation through explicit create/update flags; preserve omitted settings with per-field update masks. (#1182) — thanks @regaw-leinad.
 - Gmail: preserve standard payload header identifiers under `--wrap-untrusted`, keep custom names and values wrapped, and wrap flattened sender/recipient display text. (#1183) — thanks @postoso.

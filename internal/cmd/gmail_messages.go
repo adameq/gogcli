@@ -40,11 +40,16 @@ type GmailMessagesSearchCmd struct {
 	BodyFormat              string   `name:"body-format" help:"Body format preference when --include-body is set: text or html" default:"text" enum:"text,html"`
 	Full                    bool     `name:"full" help:"Show full message bodies without truncation (implies --include-body)"`
 	IncludeAttachments      bool     `name:"include-attachments" env:"GOG_GMAIL_INCLUDE_ATTACHMENTS" help:"Include each message's attachment metadata"`
+	IncludeRecipients       bool     `name:"include-recipients" help:"Include To, Cc, and Bcc in JSON output (no extra API calls)"`
+	SanitizeContent         bool     `name:"sanitize-content" aliases:"sanitize,safe" help:"Emit agent-oriented sanitized content, as in gmail get: strip HTML, remove HTTP(S) URLs, and sanitize header text"`
 }
 
 func (c *GmailMessagesSearchCmd) Run(ctx context.Context, flags *RootFlags) error {
 	if c.Full {
 		c.IncludeBody = true
+	}
+	if c.SanitizeContent && c.IncludeBody && c.BodyFormat == gmailMessageBodyFormatHTML {
+		return usage("--sanitize-content cannot be used with --body-format html")
 	}
 	u := ui.FromContext(ctx)
 	if err := validateGmailMaxResults(c.Max); err != nil {
@@ -121,12 +126,13 @@ func (c *GmailMessagesSearchCmd) Run(ctx context.Context, flags *RootFlags) erro
 		return err
 	}
 
-	items, err := fetchMessageDetails(ctx, svc, messages, idToName, loc, c.IncludeBody, c.BodyFormat, c.IncludeAttachments, c.UseIndexedAttachmentIDs)
+	items, err := fetchMessageDetails(ctx, svc, messages, idToName, loc, c.IncludeBody, c.BodyFormat, c.IncludeAttachments, c.UseIndexedAttachmentIDs, c.IncludeRecipients, c.SanitizeContent)
 	if err != nil {
 		return err
 	}
 
 	if outfmt.IsJSON(ctx) {
+		ctx = outfmt.WithUntrustedContentKeys(ctx, "from", "to", "cc", "bcc")
 		payload := map[string]any{
 			"messages":      items,
 			"nextPageToken": nextPageToken,
@@ -233,13 +239,16 @@ type messageItem struct {
 	// Date stays the compact human column; this is what a parser should read.
 	InternalDateISO string             `json:"internalDateIso,omitempty"`
 	From            string             `json:"from,omitempty"`
+	To              string             `json:"to,omitempty"`
+	Cc              string             `json:"cc,omitempty"`
+	Bcc             string             `json:"bcc,omitempty"`
 	Subject         string             `json:"subject,omitempty"`
 	Labels          []string           `json:"labels,omitempty"`
 	Body            string             `json:"body,omitempty"`
 	Attachments     []attachmentOutput `json:"attachments,omitempty"`
 }
 
-func fetchMessageDetails(ctx context.Context, svc *gmail.Service, messages []*gmail.Message, idToName map[string]string, loc *time.Location, includeBody bool, bodyFormat string, includeAttachments bool, useIndexedAttachmentIDs bool) ([]messageItem, error) {
+func fetchMessageDetails(ctx context.Context, svc *gmail.Service, messages []*gmail.Message, idToName map[string]string, loc *time.Location, includeBody bool, bodyFormat string, includeAttachments bool, useIndexedAttachmentIDs bool, includeRecipients bool, sanitize bool) ([]messageItem, error) {
 	preferHTML := bodyFormat == gmailMessageBodyFormatHTML
 	if len(messages) == 0 {
 		return nil, nil
@@ -278,8 +287,12 @@ func fetchMessageDetails(ctx context.Context, svc *gmail.Service, messages []*gm
 			if includeBody || includeAttachments {
 				call = call.Format("full")
 			} else {
+				headers := append([]string{}, gmailMessageSummaryMetadataHeaders...)
+				if includeRecipients {
+					headers = append(headers, "To", "Cc", "Bcc")
+				}
 				call = call.Format("metadata").
-					MetadataHeaders(gmailMessageSummaryMetadataHeaders...).
+					MetadataHeaders(headers...).
 					Fields(gmailMessageSummaryFields)
 			}
 			msg, err := call.Context(ctx).Do()
@@ -293,14 +306,30 @@ func fetchMessageDetails(ctx context.Context, svc *gmail.Service, messages []*gm
 				ThreadID: msg.ThreadId,
 			}
 
-			item.From = sanitizeTab(headerValue(msg.Payload, "From"))
-			item.Subject = sanitizeTab(headerValue(msg.Payload, "Subject"))
+			header := func(name string) string {
+				value := sanitizeTab(headerValue(msg.Payload, name))
+				if sanitize {
+					return sanitizeGmailText(value)
+				}
+				return value
+			}
+			item.From = header("From")
+			item.Subject = header("Subject")
+			if includeRecipients {
+				item.To = header("To")
+				item.Cc = header("Cc")
+				item.Bcc = header("Bcc")
+			}
 			item.Date = formatGmailDateInLocation(headerValue(msg.Payload, "Date"), loc)
 			item.InternalDateISO = formatGmailDateISO(msg.InternalDate, loc)
 			if includeBody {
-				if preferHTML {
+				switch {
+				case sanitize:
+					displayBody, isHTML := gmailcontent.BestBodyForDisplay(msg.Payload)
+					item.Body = sanitizeGmailBody(displayBody, isHTML)
+				case preferHTML:
 					item.Body = gmailcontent.BestBodyHTML(msg.Payload)
-				} else {
+				default:
 					item.Body = gmailcontent.BestBodyText(msg.Payload)
 				}
 			}

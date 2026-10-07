@@ -131,3 +131,37 @@ func TestWriteJSON_WrapsFlattenedGmailAddressHeaders(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteJSON_CommandContentKeysStayScoped(t *testing.T) {
+	t.Parallel()
+	base := WithUntrustedWrapper(context.Background(), UntrustedWrapOptions{Enabled: true})
+	from := WithUntrustedContentKeys(base, "from")
+	both := WithUntrustedContentKeys(from, "to")
+
+	for name, ctx := range map[string]context.Context{
+		"base":     base,
+		"from":     from,
+		"both":     both,
+		"disabled": WithUntrustedContentKeys(context.Background(), "from", "to"),
+	} {
+		var output strings.Builder
+		if err := WriteJSON(ctx, &output, map[string]string{"id": "message-1", "from": "Sender", "to": "Recipient", "cc": ""}); err != nil {
+			t.Fatal(err)
+		}
+
+		var got map[string]any
+		if err := json.Unmarshal([]byte(output.String()), &got); err != nil {
+			t.Fatal(err)
+		}
+
+		for key, want := range map[string]bool{"from": name == "from" || name == "both", "to": name == "both"} {
+			if wrapped := strings.Contains(got[key].(string), untrustedContentStartName); wrapped != want {
+				t.Errorf("%s: %s wrapped=%t, want %t", name, key, wrapped, want)
+			}
+		}
+
+		if got["id"] != "message-1" || got["cc"] != "" {
+			t.Errorf("%s: ID or empty address changed: %#v", name, got)
+		}
+	}
+}
