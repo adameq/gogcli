@@ -45,6 +45,8 @@ func newSignatureComposeService(t *testing.T, signatures map[string]string, sour
 			_ = json.NewEncoder(w).Encode(mockOriginalMessage(false))
 		case r.Method == http.MethodGet && r.URL.Path == "/gmail/v1/users/me/messages/plain-msg-1":
 			_ = json.NewEncoder(w).Encode(mockPlainOnlyForwardSource())
+		case r.Method == http.MethodGet && r.URL.Path == "/gmail/v1/users/me/messages/bodyless-msg-1":
+			_ = json.NewEncoder(w).Encode(mockBodylessForwardSource())
 		case r.Method == http.MethodGet && r.URL.Path == "/gmail/v1/users/me/drafts/d1":
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": "d1", "message": map[string]any{"id": "m1"}})
 		case r.Method == http.MethodPost && r.URL.Path == "/gmail/v1/users/me/messages/send":
@@ -451,6 +453,48 @@ func TestGmailForward_PlainOnlyOriginalKeepsHTMLSignature(t *testing.T) {
 			}
 			if !strings.Contains(got.raw, "1 &lt;b&gt; &amp; 2<br>\r\nsecond line") {
 				t.Fatalf("plain original not escaped into HTML:\n%s", got.raw)
+			}
+		})
+	}
+}
+
+// mockBodylessForwardSource is a forward source with an attachment and no body text.
+func mockBodylessForwardSource() map[string]any {
+	return map[string]any{
+		"id":       "bodyless-msg-1",
+		"threadId": "thread-1",
+		"payload": map[string]any{
+			"mimeType": "multipart/mixed",
+			"headers": []map[string]any{
+				{"name": "From", "value": "Alice <alice@example.com>"},
+				{"name": "Date", "value": "Mon, 10 Mar 2026 09:00:00 -0400"},
+				{"name": "Subject", "value": "Attachment only"},
+			},
+			"parts": []map[string]any{
+				{
+					"mimeType": "application/pdf",
+					"filename": "scan.pdf",
+					"body":     map[string]any{"attachmentId": "att-1", "size": 10},
+				},
+			},
+		},
+	}
+}
+
+func TestGmailForward_BodylessOriginalKeepsHTMLSignature(t *testing.T) {
+	t.Setenv("GOG_TIMEZONE", "UTC")
+	const imageSig = `<img src="https://example.com/logo.png">`
+	for _, cmd := range [][]string{{"drafts", "forward"}, {"forward"}} {
+		t.Run(strings.Join(cmd, " "), func(t *testing.T) {
+			svc, got, cleanup := newSignatureComposeService(t, map[string]string{"me@example.com": imageSig}, nil)
+			defer cleanup()
+			args := append([]string{"--account", "me@example.com", "gmail"}, cmd...)
+			args = append(args, "bodyless-msg-1", "--to", "a@example.com", "--skip-attachments", "--signature")
+			if result := executeWithGmailTestService(t, args, svc); result.err != nil {
+				t.Fatalf("forward: %v", result.err)
+			}
+			if !strings.Contains(got.raw, `<div class="gmail_signature">`+imageSig+`</div><br><div class="gmail_quote">`) {
+				t.Fatalf("image signature lost for a bodyless original:\n%s", got.raw)
 			}
 		})
 	}
