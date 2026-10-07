@@ -199,10 +199,14 @@ func (c *GmailForwardOptions) buildForwardComposeMessage(ctx context.Context, sv
 	// Build forwarded body (plain text).
 	fwdPlain := formatForwardedMessage(inputs.note, signature, origFrom, origDate, origSubject, origTo, origCc, origPlain, loc)
 
-	// Build forwarded body (HTML) if original had HTML.
+	// Build forwarded body (HTML) if original had HTML. A plain-only original
+	// still gets one when the signature has HTML, so the signature is not lost.
 	var fwdHTML string
-	if origHTML != "" {
+	switch {
+	case origHTML != "":
 		fwdHTML = formatForwardedMessageHTML(inputs.note, signature, origFrom, origDate, origSubject, origTo, origCc, origHTML, loc)
+	case signature.htmlBlock() != "":
+		fwdHTML = formatForwardedMessageHTML(inputs.note, signature, origFrom, origDate, origSubject, origTo, origCc, escapeTextToHTML(origPlain), loc)
 	}
 
 	// Preserve CID-backed inline resources required by the forwarded HTML and,

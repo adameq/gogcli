@@ -43,6 +43,8 @@ func newSignatureComposeService(t *testing.T, signatures map[string]string, sour
 			_ = json.NewEncoder(w).Encode(source)
 		case r.Method == http.MethodGet && r.URL.Path == "/gmail/v1/users/me/messages/orig-msg-1":
 			_ = json.NewEncoder(w).Encode(mockOriginalMessage(false))
+		case r.Method == http.MethodGet && r.URL.Path == "/gmail/v1/users/me/messages/plain-msg-1":
+			_ = json.NewEncoder(w).Encode(mockPlainOnlyForwardSource())
 		case r.Method == http.MethodGet && r.URL.Path == "/gmail/v1/users/me/drafts/d1":
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": "d1", "message": map[string]any{"id": "m1"}})
 		case r.Method == http.MethodPost && r.URL.Path == "/gmail/v1/users/me/messages/send":
@@ -389,5 +391,84 @@ func TestGmailDraftsForward_EmptySignatureWarns(t *testing.T) {
 	}
 	if !strings.Contains(result.stderr, "Warning: no signature configured for me@example.com") || got.raw == "" {
 		t.Fatalf("expected warning and draft; stderr=%q raw=%q", result.stderr, got.raw)
+	}
+}
+
+// mockPlainOnlyForwardSource is a forward source with only a text/plain body.
+func mockPlainOnlyForwardSource() map[string]any {
+	plain := base64.RawURLEncoding.EncodeToString([]byte("1 <b> & 2\nsecond line"))
+	return map[string]any{
+		"id":       "plain-msg-1",
+		"threadId": "thread-1",
+		"payload": map[string]any{
+			"mimeType": "text/plain",
+			"headers": []map[string]any{
+				{"name": "From", "value": "Alice <alice@example.com>"},
+				{"name": "Date", "value": "Mon, 10 Mar 2026 09:00:00 -0400"},
+				{"name": "Subject", "value": "Plain original"},
+			},
+			"body": map[string]any{"data": plain, "size": len(plain)},
+		},
+	}
+}
+
+func TestGmailForward_PlainOnlyOriginalKeepsHTMLSignature(t *testing.T) {
+	t.Setenv("GOG_TIMEZONE", "UTC")
+	const (
+		imageSig = `<img src="https://example.com/logo.png">`
+		textSig  = `<div>Kind regards<br>Me Person</div>`
+	)
+	cases := []struct {
+		name      string
+		signature string
+		cmd       []string
+		note      string
+		wantSig   string
+	}{
+		{"drafts image no note", imageSig, []string{"drafts", "forward"}, "", `<div class="gmail_signature">` + imageSig + `</div><br><div class="gmail_quote">`},
+		{"drafts image with note", imageSig, []string{"drafts", "forward"}, "FYI", `<div>FYI</div><br><div class="gmail_signature">` + imageSig + `</div><br><div class="gmail_quote">`},
+		{"send image no note", imageSig, []string{"forward"}, "", `<div class="gmail_signature">` + imageSig + `</div><br><div class="gmail_quote">`},
+		{"send image with note", imageSig, []string{"forward"}, "FYI", `<div>FYI</div><br><div class="gmail_signature">` + imageSig + `</div><br><div class="gmail_quote">`},
+		{"drafts text signature", textSig, []string{"drafts", "forward"}, "", `<div class="gmail_signature">` + textSig + `</div><br><div class="gmail_quote">`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, got, cleanup := newSignatureComposeService(t, map[string]string{"me@example.com": tc.signature}, nil)
+			defer cleanup()
+			args := append([]string{"--account", "me@example.com", "gmail"}, tc.cmd...)
+			args = append(args, "plain-msg-1", "--to", "a@example.com", "--signature")
+			if tc.note != "" {
+				args = append(args, "--note", tc.note)
+			}
+			if result := executeWithGmailTestService(t, args, svc); result.err != nil {
+				t.Fatalf("forward: %v", result.err)
+			}
+			if !strings.Contains(got.raw, "Content-Type: text/html") {
+				t.Fatalf("missing text/html part:\n%s", got.raw)
+			}
+			if !strings.Contains(got.raw, tc.wantSig) {
+				t.Fatalf("signature not above forwarded block:\n%s", got.raw)
+			}
+			if !strings.Contains(got.raw, "1 &lt;b&gt; &amp; 2<br>\r\nsecond line") {
+				t.Fatalf("plain original not escaped into HTML:\n%s", got.raw)
+			}
+		})
+	}
+}
+
+func TestGmailDraftsForward_PlainOnlyOriginalWithoutSignatureHasNoHTMLPart(t *testing.T) {
+	t.Setenv("GOG_TIMEZONE", "UTC")
+	svc, got, cleanup := newSignatureComposeService(t, primarySignature(), nil)
+	defer cleanup()
+
+	result := executeWithGmailTestService(t, []string{
+		"--account", "me@example.com", "gmail", "drafts", "forward", "plain-msg-1",
+		"--to", "a@example.com", "--note", "FYI",
+	}, svc)
+	if result.err != nil {
+		t.Fatalf("drafts forward: %v", result.err)
+	}
+	if strings.Contains(got.raw, "text/html") {
+		t.Fatalf("plain-only forward without a signature must stay plain:\n%s", got.raw)
 	}
 }
