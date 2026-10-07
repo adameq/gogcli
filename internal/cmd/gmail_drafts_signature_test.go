@@ -44,6 +44,8 @@ func newDraftSignatureService(t *testing.T, signatures map[string]string, source
 			_ = json.NewEncoder(w).Encode(mockOriginalMessage(false))
 		case r.Method == http.MethodGet && r.URL.Path == "/gmail/v1/users/me/drafts/d1":
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": "d1", "message": map[string]any{"id": "m1"}})
+		case r.Method == http.MethodPost && r.URL.Path == "/gmail/v1/users/me/messages/send":
+			writeGmailSendResponse(t, w, r, &captured.raw)
 		case (r.Method == http.MethodPost && r.URL.Path == "/gmail/v1/users/me/drafts") ||
 			(r.Method == http.MethodPut && r.URL.Path == "/gmail/v1/users/me/drafts/d1"):
 			var draft gmail.Draft
@@ -199,9 +201,10 @@ func TestGmailDrafts_SignatureOptionsAreValidated(t *testing.T) {
 
 func TestGmailDrafts_DryRunReportsSignatureFlags(t *testing.T) {
 	cases := map[string][]string{
-		"create":  {"drafts", "create", "--to", "a@example.com", "--subject", "Hi", "--body", "B"},
-		"update":  {"drafts", "update", "d1", "--to", "a@example.com", "--subject", "Hi", "--body", "B"},
-		"forward": {"drafts", "forward", "orig-msg-1", "--to", "a@example.com"},
+		"create":       {"drafts", "create", "--to", "a@example.com", "--subject", "Hi", "--body", "B"},
+		"update":       {"drafts", "update", "d1", "--to", "a@example.com", "--subject", "Hi", "--body", "B"},
+		"forward":      {"drafts", "forward", "orig-msg-1", "--to", "a@example.com"},
+		"send forward": {"forward", "orig-msg-1", "--to", "a@example.com"},
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -322,6 +325,26 @@ func TestGmailDraftsForward_SignatureBetweenNoteAndForwardedMessage(t *testing.T
 	}, svc)
 	if result.err != nil {
 		t.Fatalf("drafts forward: %v", result.err)
+	}
+	if !strings.Contains(got.raw, "FYI\r\n\r\n--\r\nKind regards\r\nMe Person\r\n\r\n---------- Forwarded message ---------") {
+		t.Fatalf("plain signature not between note and forwarded message:\n%s", got.raw)
+	}
+	if !strings.Contains(got.raw, `<div>FYI</div><br><div class="gmail_signature"><div>Kind regards<br>Me Person</div></div><br><div class="gmail_quote">`) {
+		t.Fatalf("html signature not between note and forwarded message:\n%s", got.raw)
+	}
+}
+
+func TestGmailForward_SignatureBetweenNoteAndForwardedMessage(t *testing.T) {
+	t.Setenv("GOG_TIMEZONE", "UTC")
+	svc, got, cleanup := newDraftSignatureService(t, primarySignature(), nil)
+	defer cleanup()
+
+	result := executeWithGmailTestService(t, []string{
+		"--account", "me@example.com", "gmail", "forward", "orig-msg-1",
+		"--to", "a@example.com", "--note", "FYI", "--signature",
+	}, svc)
+	if result.err != nil {
+		t.Fatalf("forward: %v", result.err)
 	}
 	if !strings.Contains(got.raw, "FYI\r\n\r\n--\r\nKind regards\r\nMe Person\r\n\r\n---------- Forwarded message ---------") {
 		t.Fatalf("plain signature not between note and forwarded message:\n%s", got.raw)
