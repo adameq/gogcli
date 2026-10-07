@@ -421,7 +421,9 @@ Remote HTTP images remain remote references. Only MIME parts referenced with
 `gmail forward` and `gmail drafts forward` accept the same `--signature`,
 `--signature-from`, and `--signature-file` flags as `gmail send`. Gmail does not
 add a signature to messages created through the API, so these flags append it
-between the `--note` and the forwarded message.
+between the `--note` and the forwarded message. When the original has only a
+plain-text body and the signature has HTML, the forward also gets an HTML part
+with the escaped original text, so an image-only signature is not lost.
 
 `gmail send --reply-to-message-id` remains available as lower-level
 composition. It now inherits an omitted subject, but its explicit `--to` and
