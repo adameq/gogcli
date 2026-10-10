@@ -175,6 +175,9 @@ above any `--quote`. When `--auto-from-addressed-alias` picks the sender,
 `--signature` uses that alias. `drafts update` appends the signature to the body
 given in that call.
 
+An HTML signature adds an HTML alternative when the supplied body is plain text,
+preserving image-only signatures and escaping the original body text.
+
 ## Stage an exact RFC822 message as a draft
 
 Use the same prebuilt MIME file as `gmail send --raw-file` to stage a draft

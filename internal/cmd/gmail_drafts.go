@@ -436,6 +436,9 @@ func buildDraftMessage(ctx context.Context, svc *gmail.Service, account string, 
 	if err != nil {
 		return nil, draftThreading{}, nil, err
 	}
+	if htmlBody == "" && signature.htmlBlock() != "" {
+		htmlBody = escapeTextToHTML(body)
+	}
 	body, htmlBody = appendComposeSignature(body, htmlBody, signature)
 	body, htmlBody, err = applyReplyQuote(ctx, input.Quote, info, body, htmlBody)
 	if err != nil {

@@ -74,6 +74,26 @@ func primarySignature() map[string]string {
 	return map[string]string{"me@example.com": `<div>Kind regards<br>Me Person</div>`}
 }
 
+func TestGmailDrafts_PlainBodyKeepsImageOnlySignature(t *testing.T) {
+	const signature = `<img src="https://example.com/logo.png">`
+	for _, cmd := range [][]string{{"create"}, {"update", "d1"}} {
+		t.Run(cmd[0], func(t *testing.T) {
+			svc, got, cleanup := newSignatureComposeService(t, map[string]string{"me@example.com": signature}, nil)
+			defer cleanup()
+			args := append([]string{"--account", "me@example.com", "gmail", "drafts"}, cmd...)
+			args = append(args, "--to", "a@example.com", "--subject", "Hi", "--body", "A < B & C", "--signature")
+			if result := executeWithGmailTestService(t, args, svc); result.err != nil {
+				t.Fatal(result.err)
+			}
+			for _, want := range []string{"Content-Type: text/html", "A &lt; B &amp; C", signature} {
+				if !strings.Contains(got.raw, want) {
+					t.Errorf("missing %q in draft MIME:\n%s", want, got.raw)
+				}
+			}
+		})
+	}
+}
+
 func TestGmailDraftsCreate_AppendsSendAsSignatureToPlainAndHTML(t *testing.T) {
 	svc, got, cleanup := newSignatureComposeService(t, primarySignature(), nil)
 	defer cleanup()
